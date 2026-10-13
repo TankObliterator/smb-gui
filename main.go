@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -35,7 +37,7 @@ type Server struct {
 }
 
 func main() {
-	portFlag := flag.Int("port", 5000, "Port to listen on")
+	portFlag := flag.Int("port", 0, "Port override to listen on (0 = use config.json, default 5000)")
 	hostFlag := flag.String("host", "0.0.0.0", "Host interface to bind to")
 	cfgPath := flag.String("config", "/etc/smb-gui/config.json", "Path to smb-gui config file")
 	smbConfPath := flag.String("smb-conf", "/etc/samba/smb.conf", "Path to Samba smb.conf")
@@ -76,6 +78,7 @@ func main() {
 	mux.HandleFunc("/api/mount-users", srv.requireAuth(srv.handleMountUsers))
 	mux.HandleFunc("/api/analytics", srv.requireAuth(srv.handleAnalytics))
 	mux.HandleFunc("/api/settings/password", srv.requireAuth(srv.handleSettingsPassword))
+	mux.HandleFunc("/api/settings/port", srv.requireAuth(srv.handleSettingsPort))
 	mux.HandleFunc("/api/settings/global", srv.requireAuth(srv.handleSettingsGlobal))
 	mux.HandleFunc("/api/settings/export-smbconf", srv.requireAuth(srv.handleExportSmbConf))
 	mux.HandleFunc("/api/settings/update/check", srv.requireAuth(srv.handleUpdateCheck))
@@ -106,7 +109,11 @@ func main() {
 		_, _ = w.Write(indexBytes)
 	})
 
-	addr := fmt.Sprintf("%s:%d", *hostFlag, *portFlag)
+	listenPort := cfgMgr.GetPort()
+	if *portFlag > 0 && listenPort == 5000 {
+		listenPort = *portFlag
+	}
+	addr := fmt.Sprintf("%s:%d", *hostFlag, listenPort)
 	log.Printf("Samba Manager (smb-gui) listening on http://%s", addr)
 
 	httpServer := &http.Server{
@@ -216,6 +223,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		"analytics":   diskReport,
 		"settings": map[string]any{
 			"auth_enabled": s.cfgMgr.IsAuthEnabled(),
+			"port":         s.cfgMgr.GetPort(),
 			"global":       globalSettings,
 			"version":      updater.GetCurrentVersion(embeddedCodeFS),
 		},
@@ -483,6 +491,72 @@ func (s *Server) handleSettingsPassword(w http.ResponseWriter, r *http.Request) 
 		"status":       "ok",
 		"auth_enabled": s.cfgMgr.IsAuthEnabled(),
 	})
+}
+
+func (s *Server) handleSettingsPort(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+	var body struct {
+		Port int `json:"port"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+		return
+	}
+	if body.Port < 1 || body.Port > 65535 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Port must be between 1 and 65535"})
+		return
+	}
+	if body.Port == 139 || body.Port == 445 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Ports 139 and 445 are reserved for Samba (smbd)"})
+		return
+	}
+
+	currentPort := s.cfgMgr.GetPort()
+	if body.Port != currentPort {
+		// Verify new port is available before saving
+		ln, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", body.Port))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("Port %d is already in use or cannot be bound: %v", body.Port, err)})
+			return
+		}
+		_ = ln.Close()
+	}
+
+	if err := s.cfgMgr.SetPort(body.Port); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Ensure systemd unit file does not hardcode an old -port flag
+	const unitPath = "/etc/systemd/system/smb-gui.service"
+	if unitBytes, err := os.ReadFile(unitPath); err == nil {
+		updatedUnit := strings.ReplaceAll(string(unitBytes), fmt.Sprintf("-port %d", currentPort), "")
+		if lines := strings.Split(updatedUnit, "\n"); len(lines) > 0 {
+			for i, l := range lines {
+				if strings.HasPrefix(strings.TrimSpace(l), "ExecStart=") {
+					lines[i] = "ExecStart=/usr/local/bin/smb-gui"
+				}
+			}
+			_ = os.WriteFile(unitPath, []byte(strings.Join(lines, "\n")), 0644)
+			_ = exec.Command("systemctl", "daemon-reload").Run()
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":  "ok",
+		"port":    body.Port,
+		"changed": body.Port != currentPort,
+	})
+
+	if body.Port != currentPort {
+		go func() {
+			time.Sleep(400 * time.Millisecond)
+			_ = exec.Command("systemctl", "restart", "smb-gui.service").Run()
+		}()
+	}
 }
 
 func (s *Server) handleSettingsGlobal(w http.ResponseWriter, r *http.Request) {

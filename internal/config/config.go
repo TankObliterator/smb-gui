@@ -86,7 +86,17 @@ func (m *Manager) IsAuthEnabled() bool {
 func (m *Manager) GetPort() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if m.cfg.Port <= 0 {
+		return 5000
+	}
 	return m.cfg.Port
+}
+
+func (m *Manager) SetPort(port int) error {
+	m.mu.Lock()
+	m.cfg.Port = port
+	m.mu.Unlock()
+	return m.Save()
 }
 
 func (m *Manager) SetPassword(newPassword string) error {

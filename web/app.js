@@ -138,6 +138,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('shareUserForm').addEventListener('submit', saveShareUser);
   document.getElementById('mountUserForm').addEventListener('submit', saveMountUser);
   document.getElementById('passwordForm').addEventListener('submit', saveUiPassword);
+  const portForm = document.getElementById('portForm');
+  if (portForm) portForm.addEventListener('submit', saveUiPort);
   document.getElementById('globalSettingsForm').addEventListener('submit', saveGlobalSettings);
 
   initHelpTooltips();
@@ -624,6 +626,16 @@ function renderSettings() {
     badge.textContent = 'No Password (Default)';
   }
 
+  const currentPort = state.settings.port || 5000;
+  const portBadge = document.getElementById('portStatusBadge');
+  if (portBadge) {
+    portBadge.textContent = `Port ${currentPort}`;
+  }
+  const portInput = document.getElementById('uiPortInput');
+  if (portInput && document.activeElement !== portInput) {
+    portInput.value = currentPort;
+  }
+
   const verBadge = document.getElementById('updateStatusBadge') || document.getElementById('currentVersionBadge');
   if (verBadge && state.settings.version) {
     verBadge.className = 'badge badge-info';
@@ -999,6 +1011,48 @@ async function disableUiPassword() {
     refreshAll();
   } catch (err) {
     showToast(err.message, 'error');
+  }
+}
+
+async function saveUiPort(e) {
+  e.preventDefault();
+  const portInput = document.getElementById('uiPortInput');
+  const btn = document.getElementById('savePortBtn');
+  const port = parseInt(portInput.value, 10);
+  if (!port || port < 1 || port > 65535) {
+    showToast('Please enter a valid port between 1 and 65535', 'error');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+  }
+
+  try {
+    const res = await api('/api/settings/port', {
+      method: 'POST',
+      body: JSON.stringify({ port })
+    });
+    if (res.changed) {
+      showToast(`Port changed to ${port}. Redirecting...`, 'success');
+      if (btn) btn.textContent = 'Redirecting...';
+      setTimeout(() => {
+        window.location.href = `${window.location.protocol}//${window.location.hostname}:${port}/settings`;
+      }, 1100);
+    } else {
+      showToast(`Web UI is already listening on port ${port}`, 'info');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Save Port & Restart';
+      }
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Save Port & Restart';
+    }
   }
 }
 

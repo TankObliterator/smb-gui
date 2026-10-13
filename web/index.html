@@ -435,7 +435,24 @@
         </form>
       </div>
 
-      <div class="grid-2">
+      <div class="grid-3">
+        <!-- Web UI Port Card -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Web UI Port</div>
+            <span id="portStatusBadge" class="badge badge-info">Port 5000</span>
+          </div>
+          <form id="portForm">
+            <div class="form-group">
+              <label class="form-label">Listen Port <span class="help-tip" data-tip="TCP port used to access this Web UI (default: 5000). Changing the port automatically restarts smb-gui and redirects your browser.">?</span></label>
+              <input type="number" id="uiPortInput" class="form-control" min="1" max="65535" value="5000" required>
+            </div>
+            <div class="action-group" style="margin-top:14px;">
+              <button type="submit" id="savePortBtn" class="btn btn-primary">Save Port &amp; Restart</button>
+            </div>
+          </form>
+        </div>
+
         <!-- Web UI Authentication Card -->
         <div class="card">
           <div class="card-header">

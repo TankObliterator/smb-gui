@@ -85,7 +85,7 @@ After=network.target smbd.service nmbd.service
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/smb-gui -port ${PORT}
+ExecStart=/usr/local/bin/smb-gui
 Restart=on-failure
 RestartSec=3
 
