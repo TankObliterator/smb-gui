@@ -64,14 +64,8 @@ body {
 .brand-icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), #1d4ed8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 700;
   flex-shrink: 0;
+  display: block;
 }
 
 .brand-title {
