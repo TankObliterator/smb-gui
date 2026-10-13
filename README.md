@@ -1,3 +1,6 @@
+# Please Read
+Non AI readme coming soon, use at your own risk till then and maybe after.
+
 # Samba Manager (`smb-gui`)
 
 A lightweight, native Linux Samba & CIFS Web UI written in Go (single compiled binary with embedded dark-mode UI, zero runtime dependencies, ~5–10 MB RAM).
