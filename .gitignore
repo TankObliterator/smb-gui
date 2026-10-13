@@ -1,0 +1,12 @@
+# Binaries & Archives
+smb-gui
+*.exe
+*.new
+*.bak
+*.zip
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

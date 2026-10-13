@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Samba Manager</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <!-- Optional Login Overlay (Only active if user sets a password in Settings) -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-card">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+        <div class="brand-icon">SM</div>
+        <div>
+          <div class="brand-title">Samba Manager</div>
+          <div class="brand-sub">Authentication Required</div>
+        </div>
+      </div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="loginPassword" class="form-control" placeholder="Enter UI password" required autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:6px;">Unlock Web UI</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">SM</div>
+      <div class="brand-text">
+        <div class="brand-title">Samba Manager</div>
+        <div class="brand-sub">Native Linux SMB Tool</div>
+      </div>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </li>
+      <li class="nav-item" data-view="shares">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>Samba Shares</span>
+      </li>
+      <li class="nav-item" data-view="share-users">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Share Users</span>
+      </li>
+      <li class="nav-item" data-view="mounts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        <span>Samba Mounts</span>
+      </li>
+      <li class="nav-item" data-view="mount-users">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Mount Users</span>
+      </li>
+      <li class="nav-item" data-view="analytics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Disk Analytics</span>
+      </li>
+      <li class="nav-item" data-view="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <div class="service-pill">
+        <span>SMBD Daemon</span>
+        <span id="sidebarSmbd"><span class="dot offline"></span>...</span>
+      </div>
+      <div class="service-pill">
+        <span>NMBD Daemon</span>
+        <span id="sidebarNmbd"><span class="dot offline"></span>...</span>
+      </div>
+      <div id="logoutWrap" style="display:none; margin-top:6px;">
+        <button class="btn btn-outline btn-sm" style="width:100%;" onclick="logout()">Lock Session</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+
+    <!-- 1. DASHBOARD VIEW -->
+    <section id="view-dashboard" class="view-section active">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Dashboard</h1>
+          <p class="page-subtitle">Overview of Samba server daemons, shares, CIFS mounts, and storage</p>
+        </div>
+      </div>
+
+      <div class="grid-4">
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">SMBD Service</div>
+            <div class="stat-value" id="dashSmbdStatus">--</div>
+            <div class="stat-sub" id="dashSmbVersion">Checking...</div>
+          </div>
+          <div class="stat-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">Samba Shares</div>
+            <div class="stat-value" id="dashSharesCount">0</div>
+            <div class="stat-sub" id="dashConnections">0 active connections</div>
+          </div>
+          <div class="stat-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">Samba Mounts</div>
+            <div class="stat-value" id="dashMountsCount">0</div>
+            <div class="stat-sub" id="dashMountsActive">0 currently mounted</div>
+          </div>
+          <div class="stat-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">Users (Share / Mount)</div>
+            <div class="stat-value" id="dashUsersCount">0 / 0</div>
+            <div class="stat-sub">Native smbpasswd &amp; cred files</div>
+          </div>
+          <div class="stat-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Daemon Control Bar -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Samba Service Controls</div>
+          <span class="badge badge-muted">Native systemd / smbd</span>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <div style="font-size:0.88rem; color:var(--text-secondary);">
+            Control the host <code>smbd</code> and <code>nmbd</code> services directly. Shares and mounts remain active even if this web service is stopped or uninstalled.
+          </div>
+          <div class="action-group">
+            <button id="svcBtnStart" class="btn btn-success btn-sm" onclick="controlService('start')" disabled>Start</button>
+            <button id="svcBtnRestart" class="btn btn-outline btn-sm" onclick="controlService('restart')" disabled>Restart</button>
+            <button id="svcBtnReload" class="btn btn-outline btn-sm" onclick="controlService('reload')" disabled>Reload Config</button>
+            <button id="svcBtnStop" class="btn btn-danger btn-sm" onclick="controlService('stop')" disabled>Stop</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Configured Samba Shares</div>
+            <button class="btn btn-outline btn-sm" onclick="switchView('shares')">Manage Shares</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Share</th>
+                  <th>Path</th>
+                  <th>Access</th>
+                </tr>
+              </thead>
+              <tbody id="dashSharesTable">
+                <tr><td colspan="3" class="empty-state">Loading shares...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Configured CIFS Mounts</div>
+            <button class="btn btn-outline btn-sm" onclick="switchView('mounts')">Manage Mounts</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Remote Share</th>
+                  <th>Mount Point</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="dashMountsTable">
+                <tr><td colspan="3" class="empty-state">Loading mounts...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. SAMBA SHARES LIST VIEW -->
+    <section id="view-shares" class="view-section">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Samba Shares List</h1>
+          <p class="page-subtitle">Native shares stored in <code>/etc/samba/smb.conf</code></p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openShareModal()">+ Add Samba Share</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Share Name</th>
+                <th>Directory Path</th>
+                <th>Mode</th>
+                <th>Guest</th>
+                <th>Allowed Users / Write List</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="sharesTableBody">
+              <tr><td colspan="6" class="empty-state">Loading shares...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. SAMBA SHARE USER LIST VIEW -->
+    <section id="view-share-users" class="view-section">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Samba Share User List</h1>
+          <p class="page-subtitle">Samba server accounts managed via native <code>smbpasswd</code> &amp; <code>pdbedit</code></p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openShareUserModal()">+ Add Share User</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Linux UID</th>
+                <th>Account Status</th>
+                <th>Accessible Shares</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="shareUsersTableBody">
+              <tr><td colspan="5" class="empty-state">Loading share users...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. SAMBA MOUNTS LIST VIEW -->
+    <section id="view-mounts" class="view-section">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Samba Mounts List</h1>
+          <p class="page-subtitle">Native CIFS client mounts persisted in <code>/etc/fstab</code></p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openMountModal()">+ Add Samba Mount</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Remote Share (UNC)</th>
+                <th>Local Mount Point</th>
+                <th>Mount User</th>
+                <th>Access / Version</th>
+                <th>Persistence</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="mountsTableBody">
+              <tr><td colspan="7" class="empty-state">Loading mounts...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. SAMBA MOUNT USER LIST VIEW -->
+    <section id="view-mount-users" class="view-section">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Samba Mount User List</h1>
+          <p class="page-subtitle">Native CIFS credential files stored in <code>/etc/samba/credentials/*.cred</code> (chmod 0600)</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openMountUserModal()">+ Add Mount User</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SMB Username</th>
+                <th>Domain / Workgroup</th>
+                <th>Credential File</th>
+                <th>Used By Mounts</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="mountUsersTableBody">
+              <tr><td colspan="5" class="empty-state">Loading mount user credentials...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. DISK ANALYTICS VIEW -->
+    <section id="view-analytics" class="view-section">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Disk Analytics</h1>
+          <p class="page-subtitle">Storage usage and capacity for configured Samba shares and remote CIFS mounts</p>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom: 18px;">
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">Samba Shares Online</div>
+            <div class="stat-value" id="analyticsSharesSummary">0 / 0</div>
+            <div class="stat-sub" id="analyticsSharesSub">Local directories exported via SMB</div>
+          </div>
+          <div class="stat-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div>
+            <div class="stat-label">Samba Mounts Connected</div>
+            <div class="stat-value" id="analyticsMountsSummary">0 / 0</div>
+            <div class="stat-sub" id="analyticsMountsSub">Remote CIFS shares mounted locally</div>
+          </div>
+          <div class="stat-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Samba Shares Storage</div>
+            <button class="btn btn-outline btn-sm" onclick="switchView('shares')">Manage Shares</button>
+          </div>
+          <div id="analyticsSharesContainer">
+            <div class="empty-state">Loading share storage metrics...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Samba Mounts Storage</div>
+            <button class="btn btn-outline btn-sm" onclick="switchView('mounts')">Manage Mounts</button>
+          </div>
+          <div id="analyticsMountsContainer">
+            <div class="empty-state">Loading CIFS mount storage metrics...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. SETTINGS VIEW -->
+    <section id="view-settings" class="view-section">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Settings</h1>
+          <p class="page-subtitle">Web UI authentication and global Samba server settings</p>
+        </div>
+        <div class="header-actions">
+          <a href="/api/settings/export-smbconf" class="btn btn-outline btn-sm" download="smb.conf">Download smb.conf Backup</a>
+        </div>
+      </div>
+
+      <!-- Global Samba Configuration Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Samba Server Settings (<code>[global]</code>)</div>
+        </div>
+        <form id="globalSettingsForm">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Workgroup <span class="help-tip" data-tip="Network group name this server appears under in Windows/macOS discovery (default: WORKGROUP).">?</span></label>
+              <input type="text" id="gsWorkgroup" class="form-control" placeholder="WORKGROUP" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Server Description <span class="help-tip" data-tip="Description shown next to the server name on the network (%h inserts the machine hostname).">?</span></label>
+              <input type="text" id="gsServerString" class="form-control" placeholder="Samba Server (%h)">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Hosts Allow (Optional) <span class="help-tip" data-tip="Space-separated IP addresses or subnets allowed to connect (e.g. '192.168.1. 127.'). Leave blank to allow all.">?</span></label>
+              <input type="text" id="gsHostsAllow" class="form-control" placeholder="e.g. 127. 192.168.1.">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Hosts Deny (Optional) <span class="help-tip" data-tip="Space-separated IP addresses or subnets blocked from connecting.">?</span></label>
+              <input type="text" id="gsHostsDeny" class="form-control" placeholder="e.g. ALL">
+            </div>
+          </div>
+          <div style="margin-top:12px;">
+            <button type="submit" class="btn btn-primary">Save Server Settings</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="grid-2">
+        <!-- Web UI Authentication Card -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Web UI Password</div>
+            <span id="authStatusBadge" class="badge badge-muted">No Password (Default)</span>
+          </div>
+          <form id="passwordForm">
+            <div class="form-group">
+              <label class="form-label">Web UI Password <span class="help-tip" data-tip="Optional password to lock this Web UI. Leave empty or click Disable to keep the Web UI passwordless.">?</span></label>
+              <input type="password" id="newUiPassword" class="form-control" placeholder="Enter password to enable auth">
+            </div>
+            <div class="action-group" style="margin-top:14px;">
+              <button type="submit" class="btn btn-primary">Save Password</button>
+              <button type="button" class="btn btn-danger" onclick="disableUiPassword()">Disable Password</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Software Update Card (On-Demand Only) -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Software Updates <span class="help-tip" data-tip="Compares your running code against the latest commits on TankObliterator/smb-gui (ignoring non-code changes like README updates), falling back to jsDelivr if GitHub rate-limits.">?</span></div>
+            <span id="updateStatusBadge" class="badge badge-info">2026.10.13</span>
+          </div>
+          <div id="updateStatusText" style="font-size:0.86rem; color:var(--text-secondary); margin-bottom:16px;">
+            Click below to check <code>TankObliterator/smb-gui</code> for new code commits.
+          </div>
+          <div class="action-group">
+            <button type="button" id="checkUpdateBtn" class="btn btn-primary" onclick="checkForUpdates()">Check for Updates</button>
+            <button type="button" id="applyUpdateBtn" class="btn btn-success" style="display:none;" onclick="applyUpdate()">Install Update &amp; Restart</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: ADD / EDIT SAMBA SHARE -->
+  <div id="shareModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="shareModalTitle">Add Samba Share</div>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('shareModal')">✕</button>
+      </div>
+      <form id="shareForm">
+        <div class="modal-body">
+          <input type="hidden" id="shareOriginalName">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Share Name * <span class="help-tip" data-tip="Name of the share as it appears on the network (e.g. //server/media). Letters, numbers, dots, underscores, and hyphens only.">?</span></label>
+              <input type="text" id="shareName" class="form-control" placeholder="e.g. media" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Directory Path * <span class="help-tip" data-tip="Local Linux folder to share on the network. Created automatically if it doesn't exist yet.">?</span></label>
+              <input type="text" id="sharePath" class="form-control" placeholder="e.g. /srv/samba/media" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Comment / Description <span class="help-tip" data-tip="Optional description shown next to the share when browsing from Windows, macOS, or Linux.">?</span></label>
+            <input type="text" id="shareComment" class="form-control" placeholder="Shared media folder">
+          </div>
+
+          <div class="checkbox-row">
+            <label class="checkbox-label">
+              <input type="checkbox" id="shareReadOnly">
+              <span>Read Only</span>
+              <span class="help-tip" data-tip="Allow users to view and download files, but block creating, modifying, or deleting files.">?</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="shareGuestOK">
+              <span>Guest Access</span>
+              <span class="help-tip" data-tip="Allow anyone on the network to access this share without a username or password.">?</span>
+            </label>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Valid Users <span class="help-tip" data-tip="Restrict this share to a specific Share User or group, or leave on All Authenticated Users.">?</span></label>
+              <select id="shareValidUsers" class="form-control">
+                <option value="">-- All Authenticated Users --</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Write List (Override Read-Only) <span class="help-tip" data-tip="Grant write access to a specific user even when the share is set to Read Only.">?</span></label>
+              <select id="shareWriteList" class="form-control">
+                <option value="">-- None (Use Share Mode) --</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Create Mask <span class="help-tip" data-tip="Linux permission mode applied to newly created files (0744 = owner full access, others read-only).">?</span></label>
+              <input type="text" id="shareCreateMask" class="form-control" value="0744">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Directory Mask <span class="help-tip" data-tip="Linux permission mode applied to newly created folders (0755 = owner full access, others read/enter).">?</span></label>
+              <input type="text" id="shareDirectoryMask" class="form-control" value="0755">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('shareModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Share</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD / EDIT SAMBA MOUNT -->
+  <div id="mountModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="mountModalTitle">Add Samba Mount (/etc/fstab)</div>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('mountModal')">✕</button>
+      </div>
+      <form id="mountForm">
+        <div class="modal-body">
+          <input type="hidden" id="mountOriginalPoint">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Remote Share (UNC Path) * <span class="help-tip" data-tip="Network path of the remote SMB share in //server/share format (e.g. //192.168.1.50/storage).">?</span></label>
+              <input type="text" id="mountRemotePath" class="form-control" placeholder="//192.168.1.50/storage" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Local Mount Point * <span class="help-tip" data-tip="Local Linux folder where the remote share's files will appear (created automatically).">?</span></label>
+              <input type="text" id="mountLocalPoint" class="form-control" placeholder="/mnt/storage" required>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Mount User Credential <span class="help-tip" data-tip="Select a saved Mount User credential to log into the remote server, or Guest Access.">?</span></label>
+              <select id="mountUserSelect" class="form-control">
+                <option value="">-- Guest Access (No Credentials) --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">SMB Protocol Version <span class="help-tip" data-tip="SMB version used to connect. Leave on Auto Negotiate unless an older server requires a specific version.">?</span></label>
+              <select id="mountSmbVersion" class="form-control">
+                <option value="">Auto Negotiate (Default)</option>
+                <option value="3.1.1">SMB 3.1.1</option>
+                <option value="3.0">SMB 3.0</option>
+                <option value="2.1">SMB 2.1</option>
+                <option value="2.0">SMB 2.0</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Local Owner UID (Optional) <span class="help-tip" data-tip="Linux user ID (e.g. 1000) that will own the mounted files locally so non-root apps can edit them.">?</span></label>
+              <input type="text" id="mountUID" class="form-control" placeholder="e.g. 1000">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Local Owner GID (Optional) <span class="help-tip" data-tip="Linux group ID (e.g. 1000) that will own the mounted files locally.">?</span></label>
+              <input type="text" id="mountGID" class="form-control" placeholder="e.g. 1000">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Additional CIFS Options (Optional) <span class="help-tip" data-tip="Extra comma-separated mount.cifs options added to /etc/fstab (e.g. iocharset=utf8,file_mode=0775). _netdev,nofail are included automatically.">?</span></label>
+            <input type="text" id="mountExtraOptions" class="form-control" placeholder="e.g. iocharset=utf8,file_mode=0775,dir_mode=0775">
+          </div>
+
+          <div class="checkbox-row">
+            <label class="checkbox-label">
+              <input type="checkbox" id="mountReadOnly">
+              <span>Read Only Mount (<code>ro</code>)</span>
+              <span class="help-tip" data-tip="Mount as read-only so local programs cannot modify or delete files on the remote server.">?</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('mountModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save to /etc/fstab</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD / EDIT SAMBA SHARE USER -->
+  <div id="shareUserModal" class="modal-backdrop">
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <div class="modal-title" id="shareUserModalTitle">Add Samba Share User</div>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('shareUserModal')">✕</button>
+      </div>
+      <form id="shareUserForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Username * <span class="help-tip" data-tip="Account name used to log into this server's Samba shares. Automatically creates a no-login Linux system user if needed.">?</span></label>
+            <input type="text" id="suUsername" class="form-control" placeholder="e.g. mediauser" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Samba Password * <span class="help-tip" data-tip="Password used when connecting to this server's Samba shares (stored in the native smbpasswd database).">?</span></label>
+            <input type="password" id="suPassword" class="form-control" placeholder="Enter SMB password" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('shareUserModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Share User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD / EDIT SAMBA MOUNT USER -->
+  <div id="mountUserModal" class="modal-backdrop">
+    <div class="modal" style="max-width:460px;">
+      <div class="modal-header">
+        <div class="modal-title" id="mountUserModalTitle">Add Samba Mount User Credential</div>
+        <button class="btn btn-outline btn-sm" onclick="closeModal('mountUserModal')">✕</button>
+      </div>
+      <form id="mountUserForm">
+        <div class="modal-body">
+          <input type="hidden" id="muProfileName">
+          <div class="form-group">
+            <label class="form-label">Remote SMB Username * <span class="help-tip" data-tip="Username on the remote SMB server. Auto-saved to /etc/samba/credentials/<username>.cred (mode 0600).">?</span></label>
+            <input type="text" id="muUsername" class="form-control" placeholder="e.g. nasadmin" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Remote SMB Password <span class="help-tip" data-tip="Password for the remote SMB user account. Required when creating a new credential; leave blank when editing to keep the current password.">?</span></label>
+            <input type="password" id="muPassword" class="form-control" placeholder="Enter remote SMB password">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Domain / Workgroup (Optional) <span class="help-tip" data-tip="Active Directory domain or workgroup of the remote server (usually WORKGROUP; leave blank if unsure).">?</span></label>
+            <input type="text" id="muDomain" class="form-control" placeholder="e.g. WORKGROUP">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('mountUserModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Credential File</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Floating Tooltip & Toast Notification Container -->
+  <div id="floatingTooltip" class="floating-tooltip"></div>
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
