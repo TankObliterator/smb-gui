@@ -16,7 +16,7 @@ install_packages() {
   if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq git curl ca-certificates samba samba-common-bin smbclient cifs-utils golang-go
+    apt-get install -y -qq --no-install-recommends git curl ca-certificates samba samba-common-bin smbclient cifs-utils golang-go
   elif command -v dnf >/dev/null 2>&1; then
     dnf install -y git curl ca-certificates samba samba-common-tools samba-client cifs-utils golang
   elif command -v yum >/dev/null 2>&1; then
