@@ -549,12 +549,12 @@
 
           <div class="form-grid">
             <div class="form-group">
-              <label class="form-label">Create Mask <span class="help-tip" data-tip="Linux permission mode applied to newly created files (0744 = owner full access, others read-only).">?</span></label>
-              <input type="text" id="shareCreateMask" class="form-control" value="0744">
+              <label class="form-label">Create Mask <span class="help-tip" data-tip="Linux permission mode applied to newly created files (0775 = group read/write for all share users).">?</span></label>
+              <input type="text" id="shareCreateMask" class="form-control" value="0775">
             </div>
             <div class="form-group">
-              <label class="form-label">Directory Mask <span class="help-tip" data-tip="Linux permission mode applied to newly created folders (0755 = owner full access, others read/enter).">?</span></label>
-              <input type="text" id="shareDirectoryMask" class="form-control" value="0755">
+              <label class="form-label">Directory Mask <span class="help-tip" data-tip="Linux permission mode applied to newly created folders (0775 = group read/write for all share users).">?</span></label>
+              <input type="text" id="shareDirectoryMask" class="form-control" value="0775">
             </div>
           </div>
         </div>

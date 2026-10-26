@@ -367,7 +367,7 @@ func (s *Server) handleShareUsers(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
 			return
 		}
-		if err := samba.AddOrUpdateShareUser(body.Username, body.Password); err != nil {
+		if err := samba.AddOrUpdateShareUser(s.smbConfPath, body.Username, body.Password); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}

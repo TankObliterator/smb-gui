@@ -711,8 +711,8 @@ function openShareModal() {
   document.getElementById('shareReadOnly').checked = false;
   document.getElementById('shareGuestOK').checked = false;
   populateShareUserDropdowns('', '');
-  document.getElementById('shareCreateMask').value = '0744';
-  document.getElementById('shareDirectoryMask').value = '0755';
+  document.getElementById('shareCreateMask').value = '0775';
+  document.getElementById('shareDirectoryMask').value = '0775';
   openModal('shareModal');
 }
 
@@ -727,8 +727,8 @@ function editShare(name) {
   document.getElementById('shareReadOnly').checked = !!sh.read_only;
   document.getElementById('shareGuestOK').checked = !!sh.guest_ok;
   populateShareUserDropdowns(sh.valid_users || '', sh.write_list || '');
-  document.getElementById('shareCreateMask').value = sh.create_mask || '0744';
-  document.getElementById('shareDirectoryMask').value = sh.directory_mask || '0755';
+  document.getElementById('shareCreateMask').value = sh.create_mask || '0775';
+  document.getElementById('shareDirectoryMask').value = sh.directory_mask || '0775';
   openModal('shareModal');
 }
 

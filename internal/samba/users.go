@@ -164,7 +164,7 @@ func ListSystemUsers() []string {
 	return list
 }
 
-func AddOrUpdateShareUser(username, password string) error {
+func AddOrUpdateShareUser(confPath, username, password string) error {
 	if err := ValidateUsername(username); err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func AddOrUpdateShareUser(username, password string) error {
 		if _, err := os.Stat(nologin); err != nil {
 			nologin = "/sbin/nologin"
 		}
-		if out, err := exec.Command("useradd", "-M", "-s", nologin, "-G", "smbusers", username).CombinedOutput(); err != nil {
+		if out, err := exec.Command("useradd", "-M", "-s", nologin, "-g", "smbusers", "-G", "smbusers", username).CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to create Linux user %s: %s (%w)", username, strings.TrimSpace(string(out)), err)
 		}
 	} else {
@@ -201,6 +201,20 @@ func AddOrUpdateShareUser(username, password string) error {
 
 	// Ensure user is enabled
 	_ = exec.Command("smbpasswd", "-e", username).Run()
+
+	// Ensure all existing shares on disk are accessible & writable by group smbusers
+	if confPath != "" {
+		if shares, err := ListShares(confPath); err == nil {
+			for _, sh := range shares {
+				if sh.Path != "" && sh.PathExists {
+					EnsureSharePermissions(sh.Path)
+				}
+			}
+		}
+	}
+
+	// Reload Samba so smbd immediately recognizes the new user credentials and groups
+	_ = ReloadSamba()
 	return nil
 }
 
@@ -215,6 +229,7 @@ func SetShareUserEnabled(username string, enabled bool) error {
 	if out, err := exec.Command("smbpasswd", flag, username).CombinedOutput(); err != nil {
 		return fmt.Errorf("smbpasswd %s failed: %s (%w)", flag, strings.TrimSpace(string(out)), err)
 	}
+	_ = ReloadSamba()
 	return nil
 }
 
@@ -231,5 +246,6 @@ func DeleteShareUser(username string, removeLinuxUser bool) error {
 			_ = exec.Command("userdel", username).Run()
 		}
 	}
+	_ = ReloadSamba()
 	return nil
 }

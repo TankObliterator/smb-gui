@@ -307,6 +307,35 @@ func ListShares(confPath string) ([]Share, error) {
 	return shares, nil
 }
 
+// EnsureSharePermissions verifies that the target share directory on the Linux
+// filesystem belongs to group smbusers with setgid (2775), ensuring all authenticated
+// Samba users have write permissions regardless of when their account was created.
+func EnsureSharePermissions(dirPath string) {
+	clean := filepath.Clean(strings.TrimSpace(dirPath))
+	if clean == "" || clean == "/" || clean == "." {
+		return
+	}
+	info, err := os.Stat(clean)
+	if err != nil || !info.IsDir() {
+		return
+	}
+
+	// 1. Ensure smbusers group exists
+	_ = exec.Command("groupadd", "-f", "smbusers").Run()
+
+	// 2. Set group of share directory to smbusers
+	_ = exec.Command("chgrp", "smbusers", clean).Run()
+
+	// 3. Set SGID (2775) on directory so all new files/folders inherit group smbusers
+	_ = exec.Command("chmod", "2775", clean).Run()
+
+	// 4. In background, ensure existing files/dirs in the share have group write access
+	go func(target string) {
+		_ = exec.Command("chgrp", "-R", "smbusers", target).Run()
+		_ = exec.Command("chmod", "-R", "g+rwX", target).Run()
+	}(clean)
+}
+
 func SaveShare(confPath string, originalName string, share Share, createDir bool) error {
 	if err := ValidateShareName(share.Name); err != nil {
 		return err
@@ -322,13 +351,13 @@ func SaveShare(confPath string, originalName string, share Share, createDir bool
 		if err := os.MkdirAll(share.Path, 0775); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", share.Path, err)
 		}
-		_ = os.Chmod(share.Path, 0775)
 	} else {
 		info, err := os.Stat(share.Path)
 		if err != nil || !info.IsDir() {
 			return fmt.Errorf("directory %s does not exist (enable 'Create directory if missing' to create it)", share.Path)
 		}
 	}
+	EnsureSharePermissions(share.Path)
 
 	sections, err := parseSmbConf(confPath)
 	if err != nil {
@@ -350,18 +379,22 @@ func SaveShare(confPath string, originalName string, share Share, createDir bool
 	}
 
 	if share.CreateMask == "" {
-		share.CreateMask = "0744"
+		share.CreateMask = "0775"
 	}
 	if share.DirectoryMask == "" {
-		share.DirectoryMask = "0755"
+		share.DirectoryMask = "0775"
+	}
+	if share.ForceGroup == "" {
+		share.ForceGroup = "smbusers"
 	}
 
 	buildEntries := func(existing []smbKeyVal) []smbKeyVal {
 		managedKeys := map[string]bool{
 			"path": true, "comment": true, "browseable": true, "read only": true,
 			"writable": true, "guest ok": true, "valid users": true, "write list": true,
-			"create mask": true, "directory mask": true, "force user": true,
-			"force group": true, "max connections": true,
+			"create mask": true, "directory mask": true, "force create mode": true,
+			"force directory mode": true, "force user": true, "force group": true,
+			"max connections": true,
 		}
 		var entries []smbKeyVal
 		entries = append(entries, smbKeyVal{"path", share.Path})
@@ -379,9 +412,11 @@ func SaveShare(confPath string, originalName string, share Share, createDir bool
 		}
 		if share.CreateMask != "" {
 			entries = append(entries, smbKeyVal{"create mask", share.CreateMask})
+			entries = append(entries, smbKeyVal{"force create mode", "0664"})
 		}
 		if share.DirectoryMask != "" {
 			entries = append(entries, smbKeyVal{"directory mask", share.DirectoryMask})
+			entries = append(entries, smbKeyVal{"force directory mode", "0775"})
 		}
 		if share.ForceUser != "" {
 			entries = append(entries, smbKeyVal{"force user", share.ForceUser})
