@@ -1,6 +1,7 @@
 # Please Read
-smb-gui was generated entirely by AI with the sole exclusion of this passage. This project was created because of a lack of simple samba managment options for headless linux. I have tested this extensivly(besides the samba client functionaliy currently) on two of my debian 13 based servers and use it on the dayly. In theory smb-gui should work with the common linux systems but I will do by best to help with/fix any issues that may arrise.
-Note: all the actual samba processes are managed by the common system packages. smb-gui only edits config files and reloads services when needed, its really just a fancy ui for non AI packages.
+smb-gui was generated entirely by AI with the sole exception of this passage. This project was created because of a lack of simple Samba management options for headless Linux. I have tested this extensively (the client functionality not as much as I would like) on two of my Debian 13 based servers and use it daily. In theory, smb-gui should just work with most common Linux systems, but I will do my best to help with/fix any issues that may arise.
+
+**Note:** All actual Samba processes are managed by standard system packages. smb-gui only edits config files and reloads services when needed. This project is really just a fancy UI for regular Linux Samba.
 
 # Samba Manager (`smb-gui`)
 
