@@ -858,11 +858,24 @@ func EnsureFstabSystemdOptions(fstabPath, credDir string) error {
 
 // StartAutoMountWorker attempts to mount all configured /etc/fstab CIFS shares
 // in the background upon service startup with progressive backoff.
+// Handles multi-server simultaneous reboots where remote hosts may take 10-90+ seconds
+// to finish booting and establish Tailscale/network connections.
 // Runs non-blocking in a goroutine so it never stalls smb-gui or freezes the system.
 func StartAutoMountWorker(fstabPath, credDir string) {
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
-	delays := []time.Duration{0, 5 * time.Second, 10 * time.Second, 15 * time.Second}
+	// Progressive backoff covering ~2.5 minutes for simultaneous server reboots:
+	// 0s, 5s, 10s, 15s, 30s, 30s, 60s
+	delays := []time.Duration{
+		0,
+		5 * time.Second,
+		10 * time.Second,
+		15 * time.Second,
+		30 * time.Second,
+		30 * time.Second,
+		60 * time.Second,
+	}
+
 	for attempt, delay := range delays {
 		if delay > 0 {
 			time.Sleep(delay)
@@ -877,7 +890,7 @@ func StartAutoMountWorker(fstabPath, credDir string) {
 		for _, m := range mountsList {
 			if m.InFstab && !m.Mounted {
 				unmountedCount++
-				log.Printf("[AutoMount] Attempt %d: Mounting %s (%s)...", attempt+1, m.MountPoint, m.RemotePath)
+				log.Printf("[AutoMount] Attempt %d/%d: Mounting %s (%s)...", attempt+1, len(delays), m.MountPoint, m.RemotePath)
 
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				cmd := exec.CommandContext(ctx, "mount", m.MountPoint)
@@ -887,12 +900,13 @@ func StartAutoMountWorker(fstabPath, credDir string) {
 				if mountErr == nil {
 					log.Printf("[AutoMount] Successfully mounted %s", m.MountPoint)
 				} else {
-					log.Printf("[AutoMount] Mount failed for %s: %s", m.MountPoint, strings.TrimSpace(string(out)))
+					log.Printf("[AutoMount] Mount failed for %s: %s (will retry if remote server is still booting)", m.MountPoint, strings.TrimSpace(string(out)))
 				}
 			}
 		}
 
 		if unmountedCount == 0 {
+			log.Printf("[AutoMount] All /etc/fstab CIFS mounts are active")
 			break
 		}
 	}
