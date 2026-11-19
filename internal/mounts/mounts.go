@@ -3,14 +3,17 @@ package mounts
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -383,8 +386,8 @@ func parseMountOptions(remote, mountPoint, rawOpts, credDir string) SambaMount {
 			m.ReadOnly = false
 		case opt == "guest":
 			m.Guest = true
-		case opt == "_netdev" || opt == "nofail":
-			// Standard managed persistence options
+		case opt == "_netdev" || opt == "nofail" || opt == "x-systemd.automount" || strings.HasPrefix(opt, "x-systemd."):
+			// Standard managed persistence and fast-fail systemd options
 		case strings.HasPrefix(opt, "credentials="):
 			cpath := strings.TrimPrefix(opt, "credentials=")
 			base := filepath.Base(cpath)
@@ -438,7 +441,13 @@ func buildMountOptions(m SambaMount, credDir string) (string, error) {
 		opts = append(opts, "gid="+strings.TrimSpace(m.GID))
 	}
 
-	opts = append(opts, "_netdev", "nofail")
+	// Managed systemd options:
+	// - _netdev: marks as network device (waits for network online)
+	// - nofail: does not halt boot or drop to emergency shell if server is unreachable
+	// - x-systemd.automount: mounts on first access without blocking system boot
+	// - x-systemd.mount-timeout=10s: fast-fails in 10s if offline (avoids default 90s system hang)
+	// - x-systemd.device-timeout=10s: fast-fails device timeout
+	opts = append(opts, "_netdev", "nofail", "x-systemd.automount", "x-systemd.mount-timeout=10s", "x-systemd.device-timeout=10s")
 
 	if m.ExtraOptions != "" {
 		for _, eo := range strings.Split(m.ExtraOptions, ",") {
@@ -527,9 +536,12 @@ func SaveMount(fstabPath, credDir, originalMountPoint string, req SambaMount, mo
 	_ = exec.Command("systemctl", "daemon-reload").Run()
 
 	if mountNow {
-		out, err := exec.Command("mount", mp).CombinedOutput()
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		out, err := exec.CommandContext(ctx, "mount", mp).CombinedOutput()
+		cancel()
 		if err != nil {
-			return fmt.Sprintf("Saved to /etc/fstab, but immediate mount returned: %s", strings.TrimSpace(string(out))), nil
+			diag := diagnoseMountError(req.RemotePath, credDir, req.MountUser, mp, strings.TrimSpace(string(out)), err)
+			return fmt.Sprintf("Saved to /etc/fstab, but immediate mount failed: %s", diag), nil
 		}
 		return "Saved to /etc/fstab and mounted successfully", nil
 	}
@@ -547,7 +559,9 @@ func DeleteMount(fstabPath, mountPoint string) error {
 	defer mountMu.Unlock()
 
 	// Unmount if currently mounted
-	_ = exec.Command("umount", mp).Run()
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	_ = exec.CommandContext(ctx, "umount", mp).Run()
+	cancel()
 
 	existingData, err := os.ReadFile(fstabPath)
 	if err != nil {
@@ -581,20 +595,41 @@ func DeleteMount(fstabPath, mountPoint string) error {
 	return nil
 }
 
-func ToggleMount(mountPoint string, action string) error {
+func ToggleMount(fstabPath, credDir, mountPoint, action string) error {
 	mp, err := ValidateMountPoint(mountPoint)
 	if err != nil {
 		return err
 	}
 	switch action {
 	case "mount":
-		if out, err := exec.Command("mount", mp).CombinedOutput(); err != nil {
-			return fmt.Errorf("mount failed: %s (%w)", strings.TrimSpace(string(out)), err)
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		out, err := exec.CommandContext(ctx, "mount", mp).CombinedOutput()
+		cancel()
+		if err != nil {
+			remotePath := ""
+			mountUser := ""
+			if fstabMounts, fstabErr := parseFstabMounts(fstabPath, credDir); fstabErr == nil {
+				for _, m := range fstabMounts {
+					if m.MountPoint == mp {
+						remotePath = m.RemotePath
+						mountUser = m.MountUser
+						break
+					}
+				}
+			}
+			diag := diagnoseMountError(remotePath, credDir, mountUser, mp, strings.TrimSpace(string(out)), err)
+			return errors.New(diag)
 		}
 	case "unmount", "umount":
-		if out, err := exec.Command("umount", mp).CombinedOutput(); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		out, err := exec.CommandContext(ctx, "umount", mp).CombinedOutput()
+		cancel()
+		if err != nil {
 			// Fallback to lazy unmount if busy
-			if outLazy, errLazy := exec.Command("umount", "-l", mp).CombinedOutput(); errLazy != nil {
+			ctxLazy, cancelLazy := context.WithTimeout(context.Background(), 6*time.Second)
+			outLazy, errLazy := exec.CommandContext(ctxLazy, "umount", "-l", mp).CombinedOutput()
+			cancelLazy()
+			if errLazy != nil {
 				return fmt.Errorf("umount failed: %s / %s", strings.TrimSpace(string(out)), strings.TrimSpace(string(outLazy)))
 			}
 		}
@@ -602,4 +637,298 @@ func ToggleMount(mountPoint string, action string) error {
 		return fmt.Errorf("invalid mount action: %s", action)
 	}
 	return nil
+}
+
+// diagnoseMountError probes the remote server with smbclient and checks kernel dmesg
+// to translate opaque "mount error(13): Permission denied (exit status 32)" errors into
+// exact, human-actionable diagnosis.
+func diagnoseMountError(remotePath, credDir, mountUser, mountPoint, mountOutput string, originalErr error) string {
+	remotePath = strings.TrimSpace(remotePath)
+	host := ""
+	share := ""
+	if strings.HasPrefix(remotePath, "//") {
+		trimmed := strings.TrimPrefix(remotePath, "//")
+		parts := strings.SplitN(trimmed, "/", 2)
+		if len(parts) >= 1 {
+			host = parts[0]
+		}
+		if len(parts) >= 2 {
+			share = parts[1]
+		}
+	}
+
+	// 1. Try probing with smbclient if remote path and host are available
+	if host != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		defer cancel()
+
+		var args []string
+		args = append(args, remotePath)
+		if mountUser != "" && credDir != "" {
+			cpath := CredFilePath(credDir, mountUser)
+			if _, err := os.Stat(cpath); err == nil {
+				args = append(args, "-A", cpath)
+			}
+		} else {
+			args = append(args, "-N")
+		}
+		args = append(args, "-c", "quit")
+
+		cmd := exec.CommandContext(ctx, "smbclient", args...)
+		out, _ := cmd.CombinedOutput()
+		outStr := string(out)
+
+		switch {
+		case strings.Contains(outStr, "NT_STATUS_LOGON_FAILURE"):
+			return fmt.Sprintf("Authentication Failed (NT_STATUS_LOGON_FAILURE): The remote server at %s rejected the username or password for '%s'. Check the password in Mount Users, or ensure user '%s' is registered in Samba on the remote server (e.g. 'sudo smbpasswd -a %s').", host, mountUser, mountUser, mountUser)
+		case strings.Contains(outStr, "NT_STATUS_ACCESS_DENIED"):
+			return fmt.Sprintf("Share Access Denied (NT_STATUS_ACCESS_DENIED): User '%s' logged in, but remote server %s denied permission to share '%s'. Check 'valid users' in smb.conf and directory permissions on the remote host.", mountUser, host, share)
+		case strings.Contains(outStr, "NT_STATUS_BAD_NETWORK_NAME"):
+			return fmt.Sprintf("Share Not Found (NT_STATUS_BAD_NETWORK_NAME): Share '%s' does not exist on remote server %s. Check the share name spelling.", share, host)
+		case strings.Contains(outStr, "NT_STATUS_ACCOUNT_DISABLED"):
+			return fmt.Sprintf("Account Disabled (NT_STATUS_ACCOUNT_DISABLED): User account '%s' is disabled on remote server %s.", mountUser, host)
+		case strings.Contains(outStr, "NT_STATUS_HOST_UNREACHABLE") || strings.Contains(outStr, "Connection refused") || strings.Contains(outStr, "timed out"):
+			return fmt.Sprintf("Host Unreachable: Could not connect to %s on port 445. Verify that the remote server is online and Tailscale / network is connected.", host)
+		}
+	}
+
+	// 2. Check kernel log (dmesg) for CIFS messages
+	dmesgCtx, dmesgCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer dmesgCancel()
+	dmesgOut, _ := exec.CommandContext(dmesgCtx, "dmesg", "-T").Output()
+	dmesgLines := strings.Split(string(dmesgOut), "\n")
+	var recentCifs []string
+	for i := len(dmesgLines) - 1; i >= 0 && len(recentCifs) < 5; i-- {
+		line := strings.TrimSpace(dmesgLines[i])
+		if strings.Contains(line, "CIFS:") || strings.Contains(line, "Status code returned") {
+			recentCifs = append(recentCifs, line)
+		}
+	}
+
+	for _, line := range recentCifs {
+		if strings.Contains(line, "0xc000006d") || strings.Contains(line, "STATUS_LOGON_FAILURE") {
+			return fmt.Sprintf("Authentication Failed (NT_STATUS_LOGON_FAILURE): Remote server rejected username or password for '%s'. Check Mount User credentials.", mountUser)
+		}
+		if strings.Contains(line, "0xc0000022") || strings.Contains(line, "STATUS_ACCESS_DENIED") {
+			return fmt.Sprintf("Share Access Denied (NT_STATUS_ACCESS_DENIED): User '%s' authenticated, but remote server denied access to share '%s'. Check remote permissions.", mountUser, remotePath)
+		}
+		if strings.Contains(line, "0xc00000cc") || strings.Contains(line, "STATUS_BAD_NETWORK_NAME") {
+			return fmt.Sprintf("Share Not Found (NT_STATUS_BAD_NETWORK_NAME): '%s' does not exist on the remote server.", remotePath)
+		}
+	}
+
+	// 3. Fallback for Permission Denied (error 13)
+	if strings.Contains(mountOutput, "error(13)") || strings.Contains(mountOutput, "Permission denied") {
+		return fmt.Sprintf("mount error(13): Permission denied — Remote server rejected connection. Common causes:\n1. Incorrect password for user '%s' in Mount Users.\n2. User '%s' is not registered in Samba on remote server %s (run 'sudo smbpasswd -a %s' on remote server).\n3. Remote share permissions or 'valid users' block access.\n4. Remote server requires a Domain / Workgroup (e.g. WORKGROUP).", mountUser, mountUser, host, mountUser)
+	}
+
+	if mountOutput != "" {
+		return mountOutput
+	}
+	if originalErr != nil {
+		return originalErr.Error()
+	}
+	return "Mount failed"
+}
+
+// TestMountConnection tests remote SMB credentials and connectivity via smbclient
+func TestMountConnection(remotePath, credDir, mountUser, smbVersion string) (string, error) {
+	remote, err := ValidateRemoteUNC(remotePath)
+	if err != nil {
+		return "", err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+
+	var args []string
+	args = append(args, remote)
+	if mountUser != "" && credDir != "" {
+		cpath := CredFilePath(credDir, mountUser)
+		if _, err := os.Stat(cpath); err != nil {
+			return "", fmt.Errorf("mount user credential file %s does not exist", cpath)
+		}
+		args = append(args, "-A", cpath)
+	} else {
+		args = append(args, "-N")
+	}
+
+	if smbVersion != "" {
+		args = append(args, "-m", "SMB"+strings.ReplaceAll(smbVersion, ".", "_"))
+	}
+	args = append(args, "-c", "quit")
+
+	cmd := exec.CommandContext(ctx, "smbclient", args...)
+	out, err := cmd.CombinedOutput()
+	outStr := string(out)
+
+	if err != nil {
+		diag := diagnoseMountError(remote, credDir, mountUser, "", outStr, err)
+		return "", errors.New(diag)
+	}
+
+	userDesc := "as guest"
+	if mountUser != "" {
+		userDesc = fmt.Sprintf("as user '%s'", mountUser)
+	}
+	return fmt.Sprintf("Connection successful! Authenticated with %s %s.", remote, userDesc), nil
+}
+
+// EnsureFstabSystemdOptions ensures all CIFS entries in /etc/fstab include modern
+// fast-fail systemd options (_netdev, nofail, x-systemd.automount, x-systemd.mount-timeout=10s)
+// to prevent system hangs or boot freezes when remote shares or network are offline.
+func EnsureFstabSystemdOptions(fstabPath, credDir string) error {
+	mountMu.Lock()
+	defer mountMu.Unlock()
+
+	data, err := os.ReadFile(fstabPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	changed := false
+	var outLines []string
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+			fields := strings.Fields(trimmed)
+			if len(fields) >= 4 {
+				fsType := strings.ToLower(fields[2])
+				if fsType == "cifs" || fsType == "smb3" {
+					optsStr := fields[3]
+					opts := strings.Split(optsStr, ",")
+					hasAutomount := false
+					hasTimeout := false
+					hasNetdev := false
+					hasNofail := false
+
+					for _, o := range opts {
+						o = strings.TrimSpace(o)
+						if o == "x-systemd.automount" {
+							hasAutomount = true
+						}
+						if strings.HasPrefix(o, "x-systemd.mount-timeout=") {
+							hasTimeout = true
+						}
+						if o == "_netdev" {
+							hasNetdev = true
+						}
+						if o == "nofail" {
+							hasNofail = true
+						}
+					}
+
+					if !hasAutomount || !hasTimeout || !hasNetdev || !hasNofail {
+						var newOpts []string
+						for _, o := range opts {
+							o = strings.TrimSpace(o)
+							if o != "" && o != "_netdev" && o != "nofail" && o != "x-systemd.automount" &&
+								!strings.HasPrefix(o, "x-systemd.mount-timeout=") &&
+								!strings.HasPrefix(o, "x-systemd.device-timeout=") {
+								newOpts = append(newOpts, o)
+							}
+						}
+						newOpts = append(newOpts, "_netdev", "nofail", "x-systemd.automount", "x-systemd.mount-timeout=10s", "x-systemd.device-timeout=10s")
+						fields[3] = strings.Join(newOpts, ",")
+						outLines = append(outLines, strings.Join(fields, "\t"))
+						changed = true
+						continue
+					}
+				}
+			}
+		}
+		outLines = append(outLines, line)
+	}
+
+	if changed {
+		_ = os.WriteFile(fstabPath+".bak", data, 0644)
+		if err := os.WriteFile(fstabPath, []byte(strings.Join(outLines, "\n")), 0644); err != nil {
+			return err
+		}
+		_ = exec.Command("systemctl", "daemon-reload").Run()
+		log.Printf("[Fstab] Updated CIFS entries with x-systemd.automount and 10s timeout to prevent boot freeze")
+	}
+	return nil
+}
+
+// StartAutoMountWorker attempts to mount all configured /etc/fstab CIFS shares
+// in the background upon service startup with progressive backoff.
+// Runs non-blocking in a goroutine so it never stalls smb-gui or freezes the system.
+func StartAutoMountWorker(fstabPath, credDir string) {
+	time.Sleep(1 * time.Second)
+
+	delays := []time.Duration{0, 5 * time.Second, 10 * time.Second, 15 * time.Second}
+	for attempt, delay := range delays {
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+
+		mountsList, err := ListMounts(fstabPath, credDir)
+		if err != nil {
+			return
+		}
+
+		unmountedCount := 0
+		for _, m := range mountsList {
+			if m.InFstab && !m.Mounted {
+				unmountedCount++
+				log.Printf("[AutoMount] Attempt %d: Mounting %s (%s)...", attempt+1, m.MountPoint, m.RemotePath)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				cmd := exec.CommandContext(ctx, "mount", m.MountPoint)
+				out, mountErr := cmd.CombinedOutput()
+				cancel()
+
+				if mountErr == nil {
+					log.Printf("[AutoMount] Successfully mounted %s", m.MountPoint)
+				} else {
+					log.Printf("[AutoMount] Mount failed for %s: %s", m.MountPoint, strings.TrimSpace(string(out)))
+				}
+			}
+		}
+
+		if unmountedCount == 0 {
+			break
+		}
+	}
+}
+
+// RemountAll attempts to mount all configured /etc/fstab CIFS mounts that are currently inactive
+func RemountAll(fstabPath, credDir string) ([]string, []string, error) {
+	mountsList, err := ListMounts(fstabPath, credDir)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var mounted []string
+	var failed []string
+
+	for _, m := range mountsList {
+		if !m.InFstab {
+			continue
+		}
+		if m.Mounted {
+			mounted = append(mounted, fmt.Sprintf("%s (already active)", m.MountPoint))
+			continue
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		cmd := exec.CommandContext(ctx, "mount", m.MountPoint)
+		out, mountErr := cmd.CombinedOutput()
+		cancel()
+
+		if mountErr == nil {
+			mounted = append(mounted, m.MountPoint)
+		} else {
+			diag := diagnoseMountError(m.RemotePath, credDir, m.MountUser, m.MountPoint, strings.TrimSpace(string(out)), mountErr)
+			failed = append(failed, fmt.Sprintf("%s: %s", m.MountPoint, diag))
+		}
+	}
+
+	return mounted, failed, nil
 }

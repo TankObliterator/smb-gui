@@ -52,6 +52,8 @@ func main() {
 
 	_ = samba.EnsureDefaultSmbConf(*smbConfPath)
 	_ = os.MkdirAll(*credDir, 0700)
+	_ = mounts.EnsureFstabSystemdOptions(*fstabPath, *credDir)
+	go mounts.StartAutoMountWorker(*fstabPath, *credDir)
 
 	srv := &Server{
 		cfgMgr:      cfgMgr,
@@ -73,6 +75,8 @@ func main() {
 	mux.HandleFunc("/api/shares", srv.requireAuth(srv.handleShares))
 	mux.HandleFunc("/api/mounts", srv.requireAuth(srv.handleMounts))
 	mux.HandleFunc("/api/mounts/action", srv.requireAuth(srv.handleMountAction))
+	mux.HandleFunc("/api/mounts/test", srv.requireAuth(srv.handleMountTest))
+	mux.HandleFunc("/api/mounts/remount-all", srv.requireAuth(srv.handleMountRemountAll))
 	mux.HandleFunc("/api/share-users", srv.requireAuth(srv.handleShareUsers))
 	mux.HandleFunc("/api/share-users/status", srv.requireAuth(srv.handleShareUserStatus))
 	mux.HandleFunc("/api/mount-users", srv.requireAuth(srv.handleMountUsers))
@@ -341,11 +345,50 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
 		return
 	}
-	if err := mounts.ToggleMount(body.MountPoint, body.Action); err != nil {
+	if err := mounts.ToggleMount(s.fstabPath, s.credDir, body.MountPoint, body.Action); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleMountTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+	var body struct {
+		RemotePath string `json:"remote_path"`
+		MountUser  string `json:"mount_user"`
+		SmbVersion string `json:"smb_version"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+		return
+	}
+	msg, err := mounts.TestMountConnection(body.RemotePath, s.credDir, body.MountUser, body.SmbVersion)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": msg})
+}
+
+func (s *Server) handleMountRemountAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "Method not allowed"})
+		return
+	}
+	mounted, failed, err := mounts.RemountAll(s.fstabPath, s.credDir)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":  "ok",
+		"mounted": mounted,
+		"failed":  failed,
+	})
 }
 
 func (s *Server) handleShareUsers(w http.ResponseWriter, r *http.Request) {

@@ -603,12 +603,15 @@ code, .mono {
   box-shadow: var(--shadow);
   font-size: 0.86rem;
   min-width: 260px;
-  max-width: 420px;
+  max-width: 520px;
+  white-space: pre-wrap;
+  line-height: 1.4;
   animation: slideIn 0.2s ease;
 }
 
 .toast.success { border-left-color: var(--success); }
 .toast.error { border-left-color: var(--danger); }
+.toast.warning { border-left-color: var(--warning); }
 
 @keyframes slideIn {
   from { transform: translateY(15px); opacity: 0; }

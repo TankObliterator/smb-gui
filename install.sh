@@ -80,7 +80,8 @@ chmod 0755 /usr/local/bin/smb-gui-uninstall
 cat >/etc/systemd/system/smb-gui.service <<EOF
 [Unit]
 Description=Samba Manager Web UI (smb-gui)
-After=network.target smbd.service nmbd.service
+After=network.target network-online.target smbd.service nmbd.service
+Wants=network-online.target
 
 [Service]
 Type=simple

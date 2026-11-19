@@ -24,10 +24,11 @@ function showToast(msg, type = 'info') {
   el.className = `toast ${type}`;
   el.textContent = msg;
   container.appendChild(el);
+  const duration = (type === 'error' || type === 'warning') ? 8000 : 3800;
   setTimeout(() => {
     el.style.opacity = '0';
     setTimeout(() => el.remove(), 250);
-  }, 3800);
+  }, duration);
 }
 
 async function api(path, options = {}) {
@@ -832,10 +833,78 @@ async function saveMount(e) {
   try {
     const res = await api('/api/mounts', { method: 'POST', body: JSON.stringify(payload) });
     closeModal('mountModal');
-    showToast(res.message || 'Mount saved to /etc/fstab', 'success');
+    if (res.message && res.message.includes('immediate mount failed:')) {
+      showToast(res.message, 'warning');
+    } else {
+      showToast(res.message || 'Mount saved to /etc/fstab', 'success');
+    }
     refreshAll();
   } catch (err) {
     showToast(err.message, 'error');
+  }
+}
+
+async function testCurrentMountConnection() {
+  const remotePath = document.getElementById('mountRemotePath').value.trim();
+  const mountUser = document.getElementById('mountUserSelect').value;
+  const smbVersion = document.getElementById('mountSmbVersion').value;
+  const btn = document.getElementById('testMountBtn');
+
+  if (!remotePath) {
+    showToast('Please enter a Remote Share (UNC Path) first', 'error');
+    return;
+  }
+
+  const origText = btn ? btn.textContent : 'Test Connection';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+  }
+
+  try {
+    const res = await api('/api/mounts/test', {
+      method: 'POST',
+      body: JSON.stringify({
+        remote_path: remotePath,
+        mount_user: mountUser,
+        smb_version: smbVersion
+      })
+    });
+    showToast(res.message || 'Connection verified successfully!', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  }
+}
+
+async function remountAllMounts() {
+  const btn = document.getElementById('remountAllBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Remounting...';
+  }
+  try {
+    const res = await api('/api/mounts/remount-all', { method: 'POST' });
+    if (res.failed && res.failed.length > 0) {
+      res.failed.forEach(msg => showToast(msg, 'error'));
+    }
+    if (res.mounted && res.mounted.length > 0) {
+      showToast(`Active mounts: ${res.mounted.join(', ')}`, 'success');
+    } else if (!res.failed || res.failed.length === 0) {
+      showToast('All configured CIFS mounts are up to date', 'info');
+    }
+    refreshAll();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '↻ Remount All';
+    }
   }
 }
 

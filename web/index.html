@@ -282,6 +282,7 @@
           <p class="page-subtitle">Native CIFS client mounts persisted in <code>/etc/fstab</code></p>
         </div>
         <div class="header-actions">
+          <button class="btn btn-outline" id="remountAllBtn" onclick="remountAllMounts()">↻ Remount All</button>
           <button class="btn btn-primary" onclick="openMountModal()">+ Add Samba Mount</button>
         </div>
       </div>
@@ -618,7 +619,7 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">Additional CIFS Options (Optional) <span class="help-tip" data-tip="Extra comma-separated mount.cifs options added to /etc/fstab (e.g. iocharset=utf8,file_mode=0775). _netdev,nofail are included automatically.">?</span></label>
+            <label class="form-label">Additional CIFS Options (Optional) <span class="help-tip" data-tip="Extra comma-separated mount.cifs options added to /etc/fstab (e.g. iocharset=utf8,file_mode=0775). _netdev, nofail, and x-systemd.automount are included automatically so mounts boot safely without freezing the system.">?</span></label>
             <input type="text" id="mountExtraOptions" class="form-control" placeholder="e.g. iocharset=utf8,file_mode=0775,dir_mode=0775">
           </div>
 
@@ -631,6 +632,7 @@
           </div>
         </div>
         <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="testMountBtn" onclick="testCurrentMountConnection()">Test Connection</button>
           <button type="button" class="btn btn-outline" onclick="closeModal('mountModal')">Cancel</button>
           <button type="submit" class="btn btn-primary">Save to /etc/fstab</button>
         </div>
